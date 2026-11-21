@@ -107,18 +107,6 @@ function extractList(data: unknown, depth = 0): Json[] {
   return [];
 }
 
-function findUrl(data: unknown, depth = 0): string | undefined {
-  if (depth > 2 || !data || typeof data !== "object") return undefined;
-  const o = data as Json;
-  const direct = pick(o, ["download_url", "downloadUrl", "dlink", "url", "link", "direct_url", "directUrl"]);
-  if (typeof direct === "string" && direct.length > 0) return direct;
-  for (const k of ["data", "result", "file"]) {
-    const found = findUrl(o[k], depth + 1);
-    if (found) return found;
-  }
-  return undefined;
-}
-
 async function readError(res: Response): Promise<string> {
   const text = await res.text().catch(() => "");
   try {
@@ -184,34 +172,22 @@ export class VaultClient {
   }
 
   /**
-   * Get a playable/viewable URL for a file. Handles both styles the backend
-   * might use: a JSON body containing a link, or a redirect to the file.
+   * Media URL that goes THROUGH the vault (/v1/stream). TeraBox's raw links need the
+   * logged-in session cookie, so browsers can't open them directly; the vault adds it.
    */
+  streamUrl(id: string, path?: string, dl = false, name?: string): string {
+    const q = new URLSearchParams();
+    if (path) q.set("path", path);
+    q.set("key", this.s.apiKey);
+    if (dl) {
+      q.set("dl", "1");
+      if (name) q.set("name", name);
+    }
+    return this.url(`/v1/stream/${encodeURIComponent(id)}?${q.toString()}`);
+  }
+
   async resolveUrl(id: string, path?: string): Promise<string> {
-    const q = path ? `?path=${encodeURIComponent(path)}` : "";
-    const res = await fetch(this.url(`/v1/download/${encodeURIComponent(id)}${q}`), {
-      headers: this.authHeaders(),
-    });
-    if (!res.ok) throw new VaultError(await readError(res), res.status);
-
-    const ct = res.headers.get("content-type") ?? "";
-    if (ct.includes("application/json")) {
-      const data = (await res.json()) as unknown;
-      const found = findUrl(data);
-      if (!found) throw new VaultError("Vault returned no download link for this file.");
-      return found.startsWith("http") ? found : this.url(found);
-    }
-
-    const base = new URL(this.s.baseUrl).origin;
-    const finalUrl = new URL(res.url || this.url(`/v1/download/${id}`));
-    if (finalUrl.origin !== base) {
-      // Redirected to TeraBox's CDN — use that URL directly and drop the body.
-      res.body?.cancel().catch(() => undefined);
-      return finalUrl.toString();
-    }
-    // The backend streamed the bytes itself — wrap them in a blob URL.
-    const blob = await res.blob();
-    return URL.createObjectURL(blob);
+    return this.streamUrl(id, path);
   }
 
   /** Upload a file with progress reporting (XHR, since fetch has no upload progress). */

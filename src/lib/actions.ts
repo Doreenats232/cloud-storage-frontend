@@ -1,10 +1,17 @@
-import { resolveMediaUrl, type VaultClient } from "./api";
+import { Capacitor } from "@capacitor/core";
+import { Browser } from "@capacitor/browser";
+import { type VaultClient } from "./api";
 import { createLimiter } from "./limiter";
 import type { VaultItem } from "./types";
 
-/** Resolve a fresh link for one file and trigger a browser download. */
+/** Download one file through the vault (attachment link). */
 export async function downloadItem(client: VaultClient, item: VaultItem): Promise<void> {
-  const url = await resolveMediaUrl(client, item.id, item.path);
+  const url = client.streamUrl(item.id, item.path, true, item.name);
+  if (Capacitor.isNativePlatform()) {
+    // System browser handles the attachment download (WebView can't).
+    await Browser.open({ url });
+    return;
+  }
   const a = document.createElement("a");
   a.href = url;
   a.download = item.name;
@@ -14,7 +21,7 @@ export async function downloadItem(client: VaultClient, item: VaultItem): Promis
   a.remove();
 }
 
-/** Download many files, resolving links in parallel (3 at a time). */
+/** Download many files, 3 at a time. */
 export async function downloadMany(
   client: VaultClient,
   items: VaultItem[]
