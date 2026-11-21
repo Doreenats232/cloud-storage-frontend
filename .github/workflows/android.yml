@@ -14,6 +14,9 @@ jobs:
         with: { node-version: 22, cache: npm }
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 21 }
+      - name: Restore fixed signing key
+        env: { KS: "${{ secrets.ANDROID_KEYSTORE_B64 }}" }
+        run: mkdir -p ~/.android && echo "$KS" | base64 -d > ~/.android/debug.keystore
       - run: npm ci && npm run build
       - run: npx cap add android
       - run: npx capacitor-assets generate --android
