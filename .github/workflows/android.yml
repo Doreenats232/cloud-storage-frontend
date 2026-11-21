@@ -19,6 +19,8 @@ jobs:
         run: mkdir -p ~/.android && echo "$KS" | base64 -d > ~/.android/debug.keystore
       - run: npm ci && npm run build
       - run: npx cap add android
+      - name: Add native downloader
+        run: cp native/*.java android/app/src/main/java/com/mldapps/cloudstorage/
       - run: npx capacitor-assets generate --android
       - run: npx cap sync android
       - run: cd android && chmod +x gradlew && ./gradlew assembleDebug

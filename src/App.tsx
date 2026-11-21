@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AlertTriangle, AppWindow, ChevronRight, Film, FolderOpen, Image as ImageIcon, Loader2, Smartphone, Trash2, UploadCloud, Zap, Layers, ShieldCheck, Sparkles, X } from "lucide-react";
 import { clearMediaCache } from "./lib/api";
-import { downloadItem, downloadMany } from "./lib/actions";
 import { breadcrumbs, formatSize, kindOf, sortItems } from "./lib/format";
 import { isConfigured, loadSettings, saveSettings } from "./lib/settings";
 import type { Settings, View, VaultItem } from "./lib/types";
 import { useLibrary } from "./hooks/useLibrary";
 import { useUploads } from "./hooks/useUploads";
+import { useDownloads } from "./hooks/useDownloads";
+import { DownloadTray } from "./components/DownloadTray";
 import { Sidebar, Brand } from "./components/Sidebar";
 import { Topbar, type SortMode } from "./components/Topbar";
 import { PhotoGrid } from "./components/PhotoGrid";
@@ -50,6 +51,7 @@ export default function App() {
   const uploads = useUploads(settings, library.addItems);
 
   const notify = useCallback((msg: string, tone: "ok" | "err" = "ok") => setToast({ msg, tone }), []);
+  const downloads = useDownloads(library.client, (m) => notify(m, "err"));
 
   useEffect(() => {
     if (!toast) return;
@@ -186,21 +188,16 @@ export default function App() {
 
   const doDownload = useCallback(
     async (item: VaultItem) => {
-      try {
-        await downloadItem(library.client, item);
-      } catch (e) {
-        notify(e instanceof Error ? e.message : "Download failed", "err");
-      }
+      downloads.start([item]);
     },
-    [library.client, notify]
+    [downloads]
   );
 
   const doDownloadSelected = async () => {
     const files = selectedItems.filter((it) => !it.isDir);
     if (files.length === 0) return notify("Select files to download (folders can't be downloaded)", "err");
-    notify(`Preparing ${files.length} download${files.length > 1 ? "s" : ""}…`);
-    const r = await downloadMany(library.client, files);
-    notify(r.failed ? `${r.ok} downloaded, ${r.failed} failed` : `Downloaded ${r.ok} file${r.ok > 1 ? "s" : ""}`, r.failed ? "err" : "ok");
+    downloads.start(files);
+    notify(`Downloading ${files.length} file${files.length > 1 ? "s" : ""}…`);
   };
 
   const doDelete = async () => {
@@ -421,7 +418,10 @@ export default function App() {
         />
       )}
 
-      <UploadTray tasks={uploads.tasks} onClear={uploads.clearFinished} />
+      <div className="pointer-events-none fixed bottom-24 right-3 z-40 flex w-[min(360px,calc(100vw-1.5rem))] flex-col gap-3 md:bottom-5 md:right-5 [&>*]:pointer-events-auto">
+        <DownloadTray tasks={downloads.tasks} onRetry={downloads.retry} onRemove={downloads.remove} onClear={downloads.clearFinished} />
+        <UploadTray tasks={uploads.tasks} onClear={uploads.clearFinished} onRetry={uploads.retry} onCancel={uploads.cancel} />
+      </div>
 
       {/* Drag & drop overlay */}
       {dragging && configured && (

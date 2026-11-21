@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { ArrowDownAZ, Check, Download, Loader2, Search, Trash2, Upload, X, AlertCircle, CheckCircle2 } from "lucide-react";
 import { cn } from "../utils/cn";
 import { Brand } from "./Sidebar";
@@ -29,6 +29,8 @@ interface TopbarProps {
 
 export function Topbar(p: TopbarProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const mediaRef = useRef<HTMLInputElement>(null);
+  const [menu, setMenu] = useState(false);
 
   const statusNode = (() => {
     if (p.status === "unconfigured") return null;
@@ -68,14 +70,53 @@ export function Topbar(p: TopbarProps) {
           </div>
           <div className="ml-auto flex items-center gap-2">
             <div className="hidden lg:block">{statusNode}</div>
-            <button
-              onClick={() => inputRef.current?.click()}
-              disabled={p.status === "unconfigured"}
-              className="group relative flex items-center gap-2 overflow-hidden rounded-xl bg-gradient-to-br from-violet-500 via-indigo-500 to-cyan-500 px-3.5 py-2 text-sm font-semibold text-white shadow-lg shadow-indigo-900/40 transition hover:brightness-110 active:scale-[0.98] disabled:opacity-40"
-            >
-              <Upload className="h-4 w-4" />
-              <span className="hidden sm:inline">Upload</span>
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => setMenu((m) => !m)}
+                disabled={p.status === "unconfigured"}
+                className="group relative flex items-center gap-2 overflow-hidden rounded-xl bg-gradient-to-br from-violet-500 via-indigo-500 to-cyan-500 px-3.5 py-2 text-sm font-semibold text-white shadow-lg shadow-indigo-900/40 transition hover:brightness-110 active:scale-[0.98] disabled:opacity-40"
+              >
+                <Upload className="h-4 w-4" />
+                <span className="hidden sm:inline">Upload</span>
+              </button>
+              {menu && (
+                <>
+                  <button aria-label="Close menu" className="fixed inset-0 z-30 cursor-default" onClick={() => setMenu(false)} />
+                  <div className="glass-strong pop absolute right-0 top-full z-40 mt-2 w-48 overflow-hidden rounded-xl py-1 text-sm shadow-2xl shadow-black/50">
+                    <button
+                      onClick={() => {
+                        setMenu(false);
+                        mediaRef.current?.click();
+                      }}
+                      className="block w-full px-4 py-2.5 text-left text-zinc-100 hover:bg-white/10"
+                    >
+                      Photos &amp; videos
+                    </button>
+                    <button
+                      onClick={() => {
+                        setMenu(false);
+                        inputRef.current?.click();
+                      }}
+                      className="block w-full px-4 py-2.5 text-left text-zinc-100 hover:bg-white/10"
+                    >
+                      Any file
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+            <input
+              ref={mediaRef}
+              type="file"
+              multiple
+              accept="image/*,video/*"
+              className="hidden"
+              onChange={(e) => {
+                const files = Array.from(e.target.files ?? []);
+                if (files.length) p.onUpload(files);
+                e.target.value = "";
+              }}
+            />
             <input
               ref={inputRef}
               type="file"

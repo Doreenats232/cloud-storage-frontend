@@ -31,6 +31,6 @@ export interface UploadTask {
   size: number;
   dir: string;
   progress: number; // 0..1
-  status: "queued" | "uploading" | "done" | "error";
+  status: "queued" | "uploading" | "processing" | "done" | "error";
   error?: string;
 }

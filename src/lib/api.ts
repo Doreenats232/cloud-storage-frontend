@@ -128,6 +128,38 @@ async function readError(res: Response): Promise<string> {
   return text.slice(0, 200) || `Request failed (HTTP ${res.status})`;
 }
 
+class ChunkUnsupported extends Error {}
+
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) return reject(new DOMException("Canceled", "AbortError"));
+    const t = window.setTimeout(resolve, ms);
+    signal.addEventListener("abort", () => {
+      window.clearTimeout(t);
+      reject(new DOMException("Canceled", "AbortError"));
+    });
+  });
+}
+
+function putChunk(url: string, blob: Blob, headers: Record<string, string>, onBytes: (loaded: number) => void, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url);
+    for (const [k, v] of Object.entries(headers)) xhr.setRequestHeader(k, v);
+    xhr.setRequestHeader("Content-Type", "application/octet-stream");
+    xhr.upload.onprogress = (e) => onBytes(e.loaded);
+    xhr.onerror = () => reject(new VaultError("Network error while uploading.", 0));
+    xhr.ontimeout = () => reject(new VaultError("Upload timed out.", 408));
+    xhr.onload = () =>
+      xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new VaultError(errorFromBody(xhr.responseText, xhr.status), xhr.status));
+    signal.addEventListener("abort", () => {
+      xhr.abort();
+      reject(new DOMException("Canceled", "AbortError"));
+    });
+    xhr.send(blob);
+  });
+}
+
 function errorFromBody(body: string, status: number): string {
   try {
     const j = JSON.parse(body) as Json;
@@ -198,9 +230,13 @@ export class VaultClient {
   }
 
   /** Upload a file with progress reporting (XHR, since fetch has no upload progress). */
-  upload(file: File, dir: string, onProgress: (p: number) => void): Promise<VaultItem> {
+  upload(file: File, dir: string, onProgress: (p: number) => void, signal?: AbortSignal): Promise<VaultItem> {
     return new Promise<VaultItem>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
+      signal?.addEventListener("abort", () => {
+        xhr.abort();
+        reject(new DOMException("Canceled", "AbortError"));
+      });
       xhr.open("POST", this.url("/v1/upload"));
       xhr.setRequestHeader("X-Api-Key", this.s.apiKey);
       xhr.upload.onprogress = (e) => {
@@ -233,6 +269,92 @@ export class VaultClient {
       fd.append("path", joinPath(dir, file.name));
       xhr.send(fd);
     });
+  }
+
+  /**
+   * Resumable-style upload for big files: 4 MB chunks, each retried on network blips,
+   * then the vault pushes the assembled file to TeraBox (we poll until it's done).
+   * Falls back to the plain single-request upload on vaults without /v1/fs/uploads.
+   */
+  async uploadSmart(
+    file: File,
+    dir: string,
+    onProgress: (p: number) => void,
+    onPhase: (phase: "uploading" | "processing") => void,
+    signal: AbortSignal
+  ): Promise<VaultItem> {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        return await this.uploadChunked(file, dir, onProgress, onPhase, signal);
+      } catch (e) {
+        if (e instanceof ChunkUnsupported) return this.upload(file, dir, onProgress, signal);
+        const lost = e instanceof VaultError && /session not found/i.test(e.message);
+        if (lost && attempt === 0) {
+          onProgress(0);
+          continue; // server restarted mid-upload: start the file over once
+        }
+        throw e;
+      }
+    }
+    throw new VaultError("Upload failed");
+  }
+
+  private async uploadChunked(
+    file: File,
+    dir: string,
+    onProgress: (p: number) => void,
+    onPhase: (phase: "uploading" | "processing") => void,
+    signal: AbortSignal
+  ): Promise<VaultItem> {
+    if (file.size === 0) throw new ChunkUnsupported();
+    const key = { "X-Api-Key": this.s.apiKey };
+    const init = await fetch(this.url("/v1/fs/uploads"), {
+      method: "POST",
+      headers: { ...key, "Content-Type": "application/json" },
+      body: JSON.stringify({ filename: file.name, size: file.size, dir }),
+      signal,
+    });
+    if (init.status === 404 || init.status === 405) throw new ChunkUnsupported();
+    if (!init.ok) throw new VaultError(errorFromBody(await init.text(), init.status), init.status);
+    const { uploadId, chunkSize, totalChunks } = (await init.json()) as { uploadId: string; chunkSize: number; totalChunks: number };
+
+    onPhase("uploading");
+    let sent = 0;
+    for (let i = 0; i < totalChunks; i++) {
+      const blob = file.slice(i * chunkSize, Math.min(file.size, (i + 1) * chunkSize));
+      for (let attempt = 1; ; attempt++) {
+        try {
+          await putChunk(this.url(`/v1/fs/uploads/${uploadId}/${i}`), blob, key, (b) => onProgress(Math.min(0.99, (sent + b) / file.size)), signal);
+          break;
+        } catch (e) {
+          const status = e instanceof VaultError ? e.status : 0;
+          const retryable = status === 0 || status === 408 || status === 429 || status >= 500;
+          if (!retryable || attempt >= 4 || signal.aborted) throw e;
+          await sleep(1000 * 2 ** (attempt - 1), signal);
+        }
+      }
+      sent += blob.size;
+      onProgress(Math.min(0.99, sent / file.size));
+    }
+
+    onPhase("processing");
+    const done = await fetch(this.url(`/v1/fs/uploads/${uploadId}/complete`), { method: "POST", headers: key, signal });
+    if (!done.ok) throw new VaultError(errorFromBody(await done.text(), done.status), done.status);
+
+    const deadline = Date.now() + 40 * 60_000;
+    while (Date.now() < deadline) {
+      await sleep(2000, signal);
+      const r = await fetch(this.url(`/v1/fs/uploads/${uploadId}`), { headers: key, signal });
+      if (!r.ok) throw new VaultError(errorFromBody(await r.text(), r.status), r.status);
+      const st = (await r.json()) as { state: string; fsId?: string; path?: string; error?: string };
+      if (st.state === "error") throw new VaultError(st.error || "TeraBox rejected the upload");
+      if (st.state === "done") {
+        const item = normalizeEntry({ fs_id: st.fsId ?? st.path ?? uploadId, path: st.path, server_filename: file.name, size: file.size, isdir: 0 }, dir);
+        if (!item) throw new VaultError("Upload finished but the vault didn't return a file id.");
+        return item;
+      }
+    }
+    throw new VaultError("Upload is taking too long. Check the vault dashboard.");
   }
 
   /** Delete files by fs_id. */
