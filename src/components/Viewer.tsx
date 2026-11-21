@@ -17,7 +17,7 @@ interface ViewerProps {
 
 export function Viewer({ items, index, client, onClose, onNavigate, onDownload, onDelete }: ViewerProps) {
   const item = items[index];
-  const { url, error } = useMediaUrl(client, item.id, true);
+  const { url, error } = useMediaUrl(client, item.id, true, item.path);
   const [loaded, setLoaded] = useState(false);
 
   // Keyboard controls + scroll lock
@@ -40,7 +40,7 @@ export function Viewer({ items, index, client, onClose, onNavigate, onDownload, 
   useEffect(() => {
     for (const j of [index + 1, index + 2, index - 1]) {
       const n = items[j];
-      if (n && n.kind !== "folder") resolveMediaUrl(client, n.id).catch(() => undefined);
+      if (n && n.kind !== "folder") resolveMediaUrl(client, n.id, n.path).catch(() => undefined);
     }
   }, [index, items, client]);
 

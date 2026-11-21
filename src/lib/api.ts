@@ -74,7 +74,8 @@ export function normalizeEntry(raw: Json, parent: string): VaultItem | null {
   );
   const thumbRaw = pick(raw, ["thumbnail", "thumb", "thumb_url", "thumbnail_url"]);
 
-  const path = joinPath(parent, nameStr);
+  const rawPath = pick(raw, ["path"]);
+  const path = typeof rawPath === "string" && rawPath.startsWith("/") ? rawPath : joinPath(parent, nameStr);
   return {
     id: String(idRaw),
     name: nameStr,
@@ -186,8 +187,9 @@ export class VaultClient {
    * Get a playable/viewable URL for a file. Handles both styles the backend
    * might use: a JSON body containing a link, or a redirect to the file.
    */
-  async resolveUrl(id: string): Promise<string> {
-    const res = await fetch(this.url(`/v1/download/${encodeURIComponent(id)}`), {
+  async resolveUrl(id: string, path?: string): Promise<string> {
+    const q = path ? `?path=${encodeURIComponent(path)}` : "";
+    const res = await fetch(this.url(`/v1/download/${encodeURIComponent(id)}${q}`), {
       headers: this.authHeaders(),
     });
     if (!res.ok) throw new VaultError(await readError(res), res.status);
@@ -290,7 +292,7 @@ const inflight = new Map<string, Promise<string>>();
 /** Max simultaneous download-link requests — keeps thumbnail grids snappy without flooding. */
 const resolveLimit = createLimiter(6);
 
-export function resolveMediaUrl(client: VaultClient, id: string): Promise<string> {
+export function resolveMediaUrl(client: VaultClient, id: string, path?: string): Promise<string> {
   const key = `${client.scope}|${id}`;
   const hit = urlCache.get(key);
   if (hit && hit.exp > Date.now()) return Promise.resolve(hit.url);
@@ -298,7 +300,7 @@ export function resolveMediaUrl(client: VaultClient, id: string): Promise<string
   const pending = inflight.get(key);
   if (pending) return pending;
 
-  const p = resolveLimit(() => client.resolveUrl(id)).then(
+  const p = resolveLimit(() => client.resolveUrl(id, path)).then(
     (url) => {
       urlCache.set(key, { url, exp: Date.now() + TTL_MS });
       inflight.delete(key);

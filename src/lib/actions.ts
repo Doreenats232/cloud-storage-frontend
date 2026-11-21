@@ -4,7 +4,7 @@ import type { VaultItem } from "./types";
 
 /** Resolve a fresh link for one file and trigger a browser download. */
 export async function downloadItem(client: VaultClient, item: VaultItem): Promise<void> {
-  const url = await resolveMediaUrl(client, item.id);
+  const url = await resolveMediaUrl(client, item.id, item.path);
   const a = document.createElement("a");
   a.href = url;
   a.download = item.name;

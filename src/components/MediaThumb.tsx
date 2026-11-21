@@ -17,7 +17,7 @@ interface MediaThumbProps {
 /** One square tile in the photo/video grid. Only fetches its URL once it scrolls into view. */
 export function MediaThumb({ item, client, selected, selectActive, onOpen, onToggle }: MediaThumbProps) {
   const [ref, visible] = useInView<HTMLDivElement>("500px");
-  const { url: resolved, error } = useMediaUrl(client, item.id, visible);
+  const { url: resolved, error } = useMediaUrl(client, item.id, visible, item.path);
   const url = item.thumb ?? resolved;
   const [loaded, setLoaded] = useState(false);
   const isVideo = item.kind === "video";

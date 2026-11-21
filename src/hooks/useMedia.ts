@@ -30,20 +30,20 @@ export function useInView<T extends Element>(rootMargin = "400px") {
 }
 
 /** Lazily resolves a viewable URL for a file id once it's needed. */
-export function useMediaUrl(client: VaultClient, id: string, enabled: boolean) {
+export function useMediaUrl(client: VaultClient, id: string, enabled: boolean, path?: string) {
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!enabled) return;
     let alive = true;
-    resolveMediaUrl(client, id)
+    resolveMediaUrl(client, id, path)
       .then((u) => alive && setUrl(u))
       .catch((e: unknown) => alive && setError(e instanceof Error ? e.message : "Failed to load"));
     return () => {
       alive = false;
     };
-  }, [client, id, enabled]);
+  }, [client, id, enabled, path]);
 
   return { url, error };
 }
