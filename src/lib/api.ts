@@ -72,7 +72,14 @@ export function normalizeEntry(raw: Json, parent: string): VaultItem | null {
   const mtime = toMs(
     pick(raw, ["server_mtime", "mtime", "modified_at", "modified", "updated_at", "server_ctime", "ctime", "created_at"])
   );
-  const thumbRaw = pick(raw, ["thumbnail", "thumb", "thumb_url", "thumbnail_url"]);
+  const thumbsObj = (raw as Record<string, unknown>).thumbs;
+  const fromObj =
+    thumbsObj && typeof thumbsObj === "object"
+      ? ((thumbsObj as Record<string, unknown>).url2 ??
+        (thumbsObj as Record<string, unknown>).url3 ??
+        (thumbsObj as Record<string, unknown>).url1)
+      : undefined;
+  const thumbRaw = pick(raw, ["thumbnail", "thumb", "thumb_url", "thumbnail_url"]) ?? fromObj;
 
   const rawPath = pick(raw, ["path"]);
   const path = typeof rawPath === "string" && rawPath.startsWith("/") ? rawPath : joinPath(parent, nameStr);

@@ -73,6 +73,7 @@ function MediaThumbBase({ item, index, client, selected, selectActive, onOpen, o
   const [near, setNear] = useState(false);
   const [src, setSrc] = useState<string | null>(() => thumbCache.get(item.id) ?? null);
   const [failed, setFailed] = useState(false);
+  const [thumbBad, setThumbBad] = useState(false);
   const isVideo = item.kind === "video";
 
   useEffect(() => {
@@ -87,7 +88,13 @@ function MediaThumbBase({ item, index, client, selected, selectActive, onOpen, o
   }, []);
 
   useEffect(() => {
-    if (isVideo || src || failed || !near) return;
+    if (src || failed || !near) return;
+    // TeraBox's own small thumbnail (works for photos AND video frames), straight from its CDN.
+    if (item.thumb && !thumbBad) {
+      setSrc(item.thumb);
+      return;
+    }
+    if (isVideo) return;
     let stop: (() => void) | undefined;
     const release = requestSlot(() => {
       stop = loadThumb(item.thumb ?? client.streamUrl(item.id, item.path), item.id, (s) => {
@@ -100,7 +107,7 @@ function MediaThumbBase({ item, index, client, selected, selectActive, onOpen, o
       stop?.();
       release();
     };
-  }, [near, isVideo, src, failed, client, item.id, item.path, item.thumb]);
+  }, [near, isVideo, src, failed, thumbBad, client, item.id, item.path, item.thumb]);
 
   return (
     <div
@@ -111,13 +118,24 @@ function MediaThumbBase({ item, index, client, selected, selectActive, onOpen, o
         selected && "ring-2 ring-violet-400"
       )}
     >
-      {isVideo ? (
+      {src ? (
+        <img
+          src={src}
+          alt=""
+          decoding="async"
+          onError={() => {
+            if (src === item.thumb) {
+              setThumbBad(true);
+              setSrc(null);
+            } else setFailed(true);
+          }}
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      ) : isVideo ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-violet-900/40 to-ink-900 text-violet-200/80">
           <Film className="h-8 w-8" />
           <span className="max-w-[85%] truncate text-[10px] text-zinc-400">{item.name}</span>
         </div>
-      ) : src ? (
-        <img src={src} alt="" decoding="async" className="absolute inset-0 h-full w-full object-cover" />
       ) : failed ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-gradient-to-br from-rose-500/10 to-zinc-900 text-rose-300/70">
           <FileWarning className="h-6 w-6" />
