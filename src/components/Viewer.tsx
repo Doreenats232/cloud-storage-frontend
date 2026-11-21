@@ -47,7 +47,7 @@ export function Viewer({ items, index, client, onClose, onNavigate, onDownload, 
   useEffect(() => setLoaded(false), [item.id]);
 
   return (
-    <div className="pop fixed inset-0 z-50 flex flex-col bg-black/90 backdrop-blur-2xl">
+    <div className="pop fixed inset-0 z-50 flex flex-col bg-black/90">
       {/* Top bar */}
       <div className="flex items-center gap-3 px-4 py-3 md:px-6">
         <button onClick={onClose} className="rounded-xl bg-white/10 p-2 text-white transition hover:bg-white/20" aria-label="Close">
@@ -79,7 +79,7 @@ export function Viewer({ items, index, client, onClose, onNavigate, onDownload, 
         {index > 0 && (
           <button
             onClick={() => onNavigate(index - 1)}
-            className="absolute left-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/10 p-3 text-white backdrop-blur transition hover:scale-105 hover:bg-white/20"
+            className="absolute left-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/10 p-3 text-white transition hover:scale-105 hover:bg-white/20"
             aria-label="Previous"
           >
             <ChevronLeft className="h-6 w-6" />
@@ -88,7 +88,7 @@ export function Viewer({ items, index, client, onClose, onNavigate, onDownload, 
         {index < items.length - 1 && (
           <button
             onClick={() => onNavigate(index + 1)}
-            className="absolute right-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/10 p-3 text-white backdrop-blur transition hover:scale-105 hover:bg-white/20"
+            className="absolute right-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/10 p-3 text-white transition hover:scale-105 hover:bg-white/20"
             aria-label="Next"
           >
             <ChevronRight className="h-6 w-6" />

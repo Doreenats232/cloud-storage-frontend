@@ -44,7 +44,6 @@ export function AppGrid({ items, selected, onToggle, onDownload, onDelete }: App
             )}
             style={{ animationDelay: `${Math.min(i, 12) * 30}ms` }}
           >
-            <div className={cn("pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-gradient-to-br opacity-20 blur-2xl transition duration-500 group-hover:opacity-40", accent)} />
 
             <div className="relative flex items-start gap-4">
               <div className={cn("flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-2xl bg-gradient-to-br text-white shadow-lg shadow-black/30", accent)}>

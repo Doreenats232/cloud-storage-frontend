@@ -34,8 +34,8 @@ export function PhotoGrid({ items, client, selected, onOpen, onToggle }: PhotoGr
 
   return (
     <div className="space-y-8 pb-28 md:pb-10">
-      {groups.map((g, gi) => (
-        <section key={g.label} className="fade-up" style={{ animationDelay: `${Math.min(gi, 8) * 40}ms` }}>
+      {groups.map((g) => (
+        <section key={g.label} className="photo-section">
           <header className="mb-3 flex items-baseline gap-3 px-1">
             <h3 className="text-sm font-semibold tracking-tight text-zinc-200">{g.label}</h3>
             <span className="text-xs text-zinc-600">{g.entries.length}</span>
@@ -46,11 +46,12 @@ export function PhotoGrid({ items, client, selected, onOpen, onToggle }: PhotoGr
               <MediaThumb
                 key={item.id}
                 item={item}
+                index={index}
                 client={client}
                 selected={selected.has(item.id)}
                 selectActive={selectActive}
-                onOpen={() => onOpen(index)}
-                onToggle={() => onToggle(item.id)}
+                onOpen={onOpen}
+                onToggle={onToggle}
               />
             ))}
           </div>

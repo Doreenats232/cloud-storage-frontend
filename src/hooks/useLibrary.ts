@@ -8,6 +8,22 @@ const MAX_ITEMS = 25000;
 /** Parallel folder listings during a scan. */
 const SCAN_CONCURRENCY = 5;
 
+function readCache(key: string): VaultItem[] {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as VaultItem[]) : [];
+  } catch {
+    return [];
+  }
+}
+function writeCache(key: string, items: VaultItem[]) {
+  try {
+    localStorage.setItem(key, JSON.stringify(items.slice(0, 8000)));
+  } catch {
+    /* storage full: skip */
+  }
+}
+
 export type LibraryStatus = "idle" | "scanning" | "ready" | "error";
 
 /**
@@ -22,6 +38,8 @@ export function useLibrary(settings: Settings, enabled: boolean) {
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [lastScanned, setLastScanned] = useState<number | null>(null);
 
+  const cacheKey = `vault.lib.v1|${settings.baseUrl}|${settings.apiKey.slice(-6)}`;
+  const hasCacheRef = useRef(false);
   const mapRef = useRef<Map<string, VaultItem>>(new Map());
   const genRef = useRef(0);
 
@@ -53,9 +71,9 @@ export function useLibrary(settings: Settings, enabled: boolean) {
       flushTimer = window.setTimeout(() => {
         flushTimer = null;
         if (!alive()) return;
-        flushNow();
+        if (!hasCacheRef.current) flushNow();
         setProgress({ done: foldersDone, total: seen.size });
-      }, 250);
+      }, 1200);
     };
 
     const walk = async (dir: string, isRoot: boolean): Promise<void> => {
@@ -90,6 +108,7 @@ export function useLibrary(settings: Settings, enabled: boolean) {
       if (!alive()) return;
       if (flushTimer !== null) window.clearTimeout(flushTimer);
       flushNow();
+      writeCache(cacheKey, Array.from(next.values()));
       setProgress({ done: foldersDone, total: seen.size });
       setLastScanned(Date.now());
       setStatus("ready");
@@ -99,7 +118,7 @@ export function useLibrary(settings: Settings, enabled: boolean) {
       setError(err instanceof Error ? err.message : "Could not reach the vault.");
       setStatus("error");
     }
-  }, [client, enabled, flushNow]);
+  }, [client, enabled, flushNow, cacheKey]);
 
   useEffect(() => {
     if (!enabled) {
@@ -109,12 +128,15 @@ export function useLibrary(settings: Settings, enabled: boolean) {
       mapRef.current = new Map();
       return;
     }
+    const cached = readCache(cacheKey);
+    hasCacheRef.current = cached.length > 0;
+    if (cached.length) setItems(cached);
     void scan();
     return () => {
       // Invalidate any in-flight scan when settings change or we unmount.
       genRef.current++;
     };
-  }, [enabled, scan]);
+  }, [enabled, scan, cacheKey]);
 
   /** Add items without a full rescan (e.g. right after an upload). */
   const addItems = useCallback(

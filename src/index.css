@@ -39,16 +39,12 @@ body {
 }
 
 .glass {
-  background: rgba(20, 20, 36, 0.6);
-  backdrop-filter: blur(18px) saturate(140%);
-  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  background: rgba(22, 22, 40, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 .glass-strong {
-  background: rgba(14, 14, 26, 0.85);
-  backdrop-filter: blur(24px) saturate(160%);
-  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  background: rgba(14, 14, 26, 0.96);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -96,8 +92,13 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 .fade-up {
-  animation: fade-up 0.35s ease both;
+  animation: none;
 }
+.photo-section {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 900px;
+}
+.tile-shine::after { display: none; }
 
 @keyframes pop {
   0% { transform: scale(0.96); opacity: 0; }

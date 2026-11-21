@@ -1,100 +1,149 @@
-import { useState } from "react";
-import { Check, FileWarning, Play } from "lucide-react";
+import { memo, useEffect, useRef, useState } from "react";
+import { Check, FileWarning, Film, Play } from "lucide-react";
 import type { VaultClient } from "../lib/api";
-import { useInView, useMediaUrl } from "../hooks/useMedia";
+import { requestSlot, thumbCache } from "../lib/slots";
 import { cn } from "../utils/cn";
 import type { VaultItem } from "../lib/types";
 
 interface MediaThumbProps {
   item: VaultItem;
+  index: number;
   client: VaultClient;
   selected: boolean;
   selectActive: boolean;
-  onOpen: () => void;
-  onToggle: () => void;
+  onOpen: (index: number) => void;
+  onToggle: (id: string) => void;
 }
 
-/** One square tile in the photo/video grid. Only fetches its URL once it scrolls into view. */
-export function MediaThumb({ item, client, selected, selectActive, onOpen, onToggle }: MediaThumbProps) {
-  const [ref, visible] = useInView<HTMLDivElement>("500px");
-  const { url: resolved, error } = useMediaUrl(client, item.id, visible, item.path);
-  const url = item.thumb ?? resolved;
-  const [loaded, setLoaded] = useState(false);
+const THUMB = 360;
+
+/** Download the full image once, shrink it to a small thumbnail and cache that. */
+function loadThumb(url: string, id: string, done: (src: string | null) => void): () => void {
+  let cancelled = false;
+  const attempt = (cors: boolean) => {
+    const img = new Image();
+    if (cors) img.crossOrigin = "anonymous";
+    img.decoding = "async";
+    img.onload = () => {
+      if (cancelled) return;
+      try {
+        const r = Math.min(1, THUMB / Math.max(img.naturalWidth, img.naturalHeight));
+        const c = document.createElement("canvas");
+        c.width = Math.max(1, Math.round(img.naturalWidth * r));
+        c.height = Math.max(1, Math.round(img.naturalHeight * r));
+        c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height);
+        c.toBlob(
+          (b) => {
+            if (cancelled) return;
+            if (!b) return done(url);
+            const u = URL.createObjectURL(b);
+            thumbCache.set(id, u);
+            done(u);
+          },
+          "image/jpeg",
+          0.72
+        );
+      } catch {
+        done(url);
+      }
+    };
+    img.onerror = () => {
+      if (cancelled) return;
+      if (cors) attempt(false);
+      else done(null);
+    };
+    img.src = url;
+    stop = () => {
+      img.onload = null;
+      img.onerror = null;
+      img.src = "";
+    };
+  };
+  let stop = () => undefined as void;
+  attempt(true);
+  return () => {
+    cancelled = true;
+    stop();
+  };
+}
+
+/** One square tile in the photo/video grid. Videos are a light placeholder (no network). */
+function MediaThumbBase({ item, index, client, selected, selectActive, onOpen, onToggle }: MediaThumbProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [near, setNear] = useState(false);
+  const [src, setSrc] = useState<string | null>(() => thumbCache.get(item.id) ?? null);
+  const [failed, setFailed] = useState(false);
   const isVideo = item.kind === "video";
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === "undefined") {
+      setNear(true);
+      return;
+    }
+    const io = new IntersectionObserver(([e]) => setNear(e.isIntersecting), { rootMargin: "250px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (isVideo || src || failed || !near) return;
+    let stop: (() => void) | undefined;
+    const release = requestSlot(() => {
+      stop = loadThumb(item.thumb ?? client.streamUrl(item.id, item.path), item.id, (s) => {
+        if (s) setSrc(s);
+        else setFailed(true);
+        release();
+      });
+    });
+    return () => {
+      stop?.();
+      release();
+    };
+  }, [near, isVideo, src, failed, client, item.id, item.path, item.thumb]);
 
   return (
     <div
       ref={ref}
-      onClick={() => (selectActive ? onToggle() : onOpen())}
+      onClick={() => (selectActive ? onToggle(item.id) : onOpen(index))}
       className={cn(
-        "group tile-shine relative aspect-square cursor-pointer overflow-hidden rounded-xl bg-ink-800 ring-1 ring-white/5 transition duration-300",
-        "hover:-translate-y-0.5 hover:shadow-xl hover:shadow-violet-950/40 hover:ring-white/15",
-        selected && "ring-2 ring-violet-400 shadow-lg shadow-violet-900/40"
+        "group relative aspect-square cursor-pointer overflow-hidden rounded-xl bg-ink-800 ring-1 ring-white/5",
+        selected && "ring-2 ring-violet-400"
       )}
     >
-      {/* Placeholder while loading */}
-      {!loaded && !error && <div className="skeleton absolute inset-0" />}
-
-      {url && !isVideo && (
-        <img
-          src={url}
-          alt={item.name}
-          loading="lazy"
-          decoding="async"
-          onLoad={() => setLoaded(true)}
-          onError={() => setLoaded(true)}
-          className={cn(
-            "absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-105",
-            loaded ? "opacity-100" : "opacity-0"
-          )}
-        />
-      )}
-
-      {url && isVideo && (
-        <video
-          src={`${url}#t=0.1`}
-          preload="metadata"
-          muted
-          playsInline
-          onLoadedData={() => setLoaded(true)}
-          onError={() => setLoaded(true)}
-          className={cn(
-            "absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-105",
-            loaded ? "opacity-100" : "opacity-0"
-          )}
-        />
-      )}
-
-      {error && (
+      {isVideo ? (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-violet-900/40 to-ink-900 text-violet-200/80">
+          <Film className="h-8 w-8" />
+          <span className="max-w-[85%] truncate text-[10px] text-zinc-400">{item.name}</span>
+        </div>
+      ) : src ? (
+        <img src={src} alt="" decoding="async" className="absolute inset-0 h-full w-full object-cover" />
+      ) : failed ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-gradient-to-br from-rose-500/10 to-zinc-900 text-rose-300/70">
           <FileWarning className="h-6 w-6" />
           <span className="text-[10px]">Preview failed</span>
         </div>
+      ) : (
+        <div className="skeleton absolute inset-0" />
       )}
 
-      {/* Gradient + name on hover */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent p-2 opacity-0 transition duration-300 group-hover:opacity-100">
-        <p className="truncate text-[11px] font-medium text-white drop-shadow">{item.name}</p>
-      </div>
-
       {isVideo && (
-        <div className="pointer-events-none absolute bottom-2 left-2 flex items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur">
+        <div className="pointer-events-none absolute bottom-2 left-2 flex items-center gap-1 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-semibold text-white">
           <Play className="h-2.5 w-2.5 fill-white" /> Video
         </div>
       )}
 
-      {/* Selection checkbox */}
       <button
         onClick={(e) => {
           e.stopPropagation();
-          onToggle();
+          onToggle(item.id);
         }}
         aria-label={selected ? "Deselect" : "Select"}
         className={cn(
-          "absolute left-2 top-2 flex h-6 w-6 items-center justify-center rounded-full border-2 transition",
+          "absolute left-2 top-2 flex h-6 w-6 items-center justify-center rounded-full border-2",
           selected
             ? "border-violet-400 bg-violet-500 text-white opacity-100"
-            : "border-white/80 bg-black/30 text-transparent opacity-0 backdrop-blur group-hover:opacity-100",
+            : "border-white/80 bg-black/50 text-transparent opacity-0 group-hover:opacity-100",
           selectActive && !selected && "opacity-100"
         )}
       >
@@ -103,3 +152,5 @@ export function MediaThumb({ item, client, selected, selectActive, onOpen, onTog
     </div>
   );
 }
+
+export const MediaThumb = memo(MediaThumbBase);

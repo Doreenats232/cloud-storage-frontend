@@ -112,6 +112,7 @@ export default function App() {
 
   const selectedItems = useMemo(() => items.filter((it) => selected.has(it.id)), [items, selected]);
 
+  const openViewer = useCallback((i: number) => setViewerIndex(i), []);
   const toggleSelect = useCallback((id: string) => {
     setSelected((prev) => {
       const n = new Set(prev);
@@ -302,7 +303,7 @@ export default function App() {
           items={mediaList}
           client={library.client}
           selected={selected}
-          onOpen={(i) => setViewerIndex(i)}
+          onOpen={openViewer}
           onToggle={toggleSelect}
         />
       );
@@ -424,7 +425,7 @@ export default function App() {
 
       {/* Drag & drop overlay */}
       {dragging && configured && (
-        <div className="pointer-events-none fixed inset-0 z-[70] flex items-center justify-center bg-ink-950/70 backdrop-blur-sm">
+        <div className="pointer-events-none fixed inset-0 z-[70] flex items-center justify-center bg-ink-950/95">
           <div className="pop rounded-3xl border-2 border-dashed border-violet-400/60 bg-violet-500/10 px-12 py-10 text-center">
             <UploadCloud className="mx-auto mb-3 h-12 w-12 text-violet-300" />
             <p className="text-lg font-semibold text-white">Drop to upload</p>
@@ -513,7 +514,7 @@ function Modal({
   }, [onClose]);
 
   return (
-    <div className={cn("fixed inset-0 flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4", zIndex)} onMouseDown={onClose}>
+    <div className={cn("fixed inset-0 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4", zIndex)} onMouseDown={onClose}>
       <div
         onMouseDown={(e) => e.stopPropagation()}
         className={cn(
