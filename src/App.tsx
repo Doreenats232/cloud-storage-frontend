@@ -8,6 +8,9 @@ import { useLibrary } from "./hooks/useLibrary";
 import { useUploads } from "./hooks/useUploads";
 import { useDownloads } from "./hooks/useDownloads";
 import { DownloadTray } from "./components/DownloadTray";
+import { useBackup } from "./hooks/useBackup";
+import { BackupCard } from "./components/BackupCard";
+import { BackupTray } from "./components/BackupTray";
 import { Sidebar, Brand } from "./components/Sidebar";
 import { Topbar, type SortMode } from "./components/Topbar";
 import { PhotoGrid } from "./components/PhotoGrid";
@@ -51,6 +54,7 @@ export default function App() {
   const uploads = useUploads(settings, library.addItems);
 
   const notify = useCallback((msg: string, tone: "ok" | "err" = "ok") => setToast({ msg, tone }), []);
+  const backup = useBackup(settings);
   const downloads = useDownloads(library.client, (m) => notify(m, "err"));
 
   useEffect(() => {
@@ -419,6 +423,7 @@ export default function App() {
       )}
 
       <div className="pointer-events-none fixed bottom-24 right-3 z-40 flex w-[min(360px,calc(100vw-1.5rem))] flex-col gap-3 md:bottom-5 md:right-5 [&>*]:pointer-events-auto">
+        <BackupTray status={backup.status} />
         <DownloadTray tasks={downloads.tasks} onRetry={downloads.retry} onRemove={downloads.remove} onClear={downloads.clearFinished} />
         <UploadTray tasks={uploads.tasks} onClear={uploads.clearFinished} onRetry={uploads.retry} onCancel={uploads.cancel} />
       </div>
@@ -438,6 +443,7 @@ export default function App() {
       {settingsOpen && (
         <Modal onClose={() => setSettingsOpen(false)} title="Setup" subtitle="Connect your terabox-vault-backend">
           <SettingsPanel initial={settings} onSave={saveSettingsHandler} onCancel={() => setSettingsOpen(false)} />
+          <BackupCard b={backup} />
         </Modal>
       )}
 

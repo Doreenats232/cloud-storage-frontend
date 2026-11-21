@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Download, Loader2, Trash2, X, FileWarning } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Loader2, Share2, Trash2, X, FileWarning } from "lucide-react";
+import { Capacitor } from "@capacitor/core";
+import { Share } from "@capacitor/share";
 import { resolveMediaUrl, type VaultClient } from "../lib/api";
 import { useMediaUrl } from "../hooks/useMedia";
 import { VideoPlayer } from "./VideoPlayer";
@@ -20,6 +22,8 @@ export function Viewer({ items, index, client, onClose, onNavigate, onDownload, 
   const item = items[index];
   const { url, error } = useMediaUrl(client, item.id, true, item.path);
   const [loaded, setLoaded] = useState(false);
+  const [shareMenu, setShareMenu] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
 
   // Keyboard controls + scroll lock
   useEffect(() => {
@@ -47,6 +51,28 @@ export function Viewer({ items, index, client, onClose, onNavigate, onDownload, 
 
   useEffect(() => setLoaded(false), [item.id]);
 
+  const share = async (hours: number) => {
+    setShareMenu(false);
+    setNote("Making link…");
+    try {
+      const link = await client.signLink(item.path, hours * 3600);
+      if (Capacitor.isNativePlatform()) {
+        await Share.share({ title: item.name, text: `${item.name} (link works for ${hours} h)`, url: link, dialogTitle: "Share link" });
+        setNote(null);
+      } else if (navigator.share) {
+        await navigator.share({ title: item.name, url: link });
+        setNote(null);
+      } else {
+        await navigator.clipboard.writeText(link);
+        setNote("Link copied");
+      }
+    } catch (e) {
+      if (e instanceof Error && /cancel|abort/i.test(e.name + e.message)) setNote(null);
+      else setNote(e instanceof Error ? e.message : "Could not share");
+    }
+    window.setTimeout(() => setNote(null), 2500);
+  };
+
   return (
     <div className="pop fixed inset-0 z-50 flex flex-col bg-black/90">
       {/* Top bar */}
@@ -59,6 +85,28 @@ export function Viewer({ items, index, client, onClose, onNavigate, onDownload, 
           <p className="truncate text-xs text-zinc-400">
             {formatDate(item.mtime)} · {formatSize(item.size)} · {index + 1} / {items.length}
           </p>
+        </div>
+        <div className="relative">
+          <button
+            onClick={() => setShareMenu((m) => !m)}
+            className="flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/20"
+            aria-label="Share"
+          >
+            <Share2 className="h-4 w-4" /> <span className="hidden sm:inline">Share</span>
+          </button>
+          {shareMenu && (
+            <>
+              <button aria-label="Close" className="fixed inset-0 z-10 cursor-default" onClick={() => setShareMenu(false)} />
+              <div className="glass-strong pop absolute right-0 top-full z-20 mt-2 w-44 overflow-hidden rounded-xl py-1 text-sm shadow-2xl shadow-black/60">
+                <p className="px-4 pb-1 pt-2 text-[11px] uppercase tracking-wide text-zinc-500">Link works for</p>
+                {[1, 6, 24].map((h) => (
+                  <button key={h} onClick={() => void share(h)} className="block w-full px-4 py-2.5 text-left text-zinc-100 hover:bg-white/10">
+                    {h === 24 ? "24 hours" : h === 1 ? "1 hour" : `${h} hours`}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
         <button
           onClick={() => onDownload(item)}
@@ -127,6 +175,9 @@ export function Viewer({ items, index, client, onClose, onNavigate, onDownload, 
         )}
       </div>
 
+      {note && (
+        <div className="pointer-events-none absolute bottom-14 left-1/2 -translate-x-1/2 rounded-full bg-black/80 px-4 py-2 text-xs text-white">{note}</div>
+      )}
       <div className="pb-4 text-center text-[11px] text-zinc-600">← → to browse · Esc to close</div>
     </div>
   );

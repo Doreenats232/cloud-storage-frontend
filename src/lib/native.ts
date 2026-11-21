@@ -8,3 +8,34 @@ export interface DownloaderPlugin {
 
 /** Android DownloadManager bridge (only exists inside the APK). */
 export const Downloader = registerPlugin<DownloaderPlugin>("Downloader");
+
+export interface BackupStatus {
+  enabled: boolean;
+  permission: boolean;
+  running: boolean;
+  current: string;
+  done: number;
+  total: number;
+  uploaded: number;
+  failed: number;
+  lastRun: number;
+  lastError: string;
+  pending: number;
+}
+
+export interface BackupPlugin {
+  ensurePermission(): Promise<{ granted: boolean }>;
+  configure(o: {
+    enabled: boolean;
+    wifiOnly: boolean;
+    cameraOnly: boolean;
+    baseUrl: string;
+    apiKey: string;
+    dir: string;
+  }): Promise<void>;
+  runNow(o: { force?: boolean; all?: boolean }): Promise<void>;
+  status(): Promise<BackupStatus>;
+}
+
+/** Photo auto-backup engine (native: scans the gallery and uploads in the background). */
+export const Backup = registerPlugin<BackupPlugin>("Backup");

@@ -357,6 +357,19 @@ export class VaultClient {
     throw new VaultError("Upload is taking too long. Check the vault dashboard.");
   }
 
+  /** Short-lived public link (max 24 h) that anyone can open without the API key. */
+  async signLink(path: string, ttl: number, dl = false): Promise<string> {
+    const res = await fetch(this.url("/v1/fs/sign"), {
+      method: "POST",
+      headers: { "X-Api-Key": this.s.apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({ path, ttl, dl }),
+    });
+    if (!res.ok) throw new VaultError(await readError(res), res.status);
+    const data = (await res.json()) as { url?: string };
+    if (!data.url) throw new VaultError("The vault didn't return a link.");
+    return data.url;
+  }
+
   /** Delete files by fs_id. */
   async remove(ids: string[]): Promise<void> {
     const res = await fetch(this.url("/v1/delete"), {
