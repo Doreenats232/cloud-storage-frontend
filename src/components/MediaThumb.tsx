@@ -2,6 +2,7 @@ import { memo, useEffect, useRef, useState } from "react";
 import { Check, FileWarning, Film, Play } from "lucide-react";
 import type { VaultClient } from "../lib/api";
 import { requestSlot, thumbCache } from "../lib/slots";
+import { getThumb, putThumb } from "../lib/thumbdb";
 import { cn } from "../utils/cn";
 import type { VaultItem } from "../lib/types";
 
@@ -38,6 +39,7 @@ function loadThumb(url: string, id: string, done: (src: string | null) => void):
             if (!b) return done(url);
             const u = URL.createObjectURL(b);
             thumbCache.set(id, u);
+            void putThumb(id, b);
             done(u);
           },
           "image/jpeg",
@@ -89,21 +91,33 @@ function MediaThumbBase({ item, index, client, selected, selectActive, onOpen, o
 
   useEffect(() => {
     if (src || failed || !near) return;
-    // TeraBox's own small thumbnail (works for photos AND video frames), straight from its CDN.
-    if (item.thumb && !thumbBad) {
-      setSrc(item.thumb);
-      return;
-    }
-    if (isVideo) return;
+    let dead = false;
     let stop: (() => void) | undefined;
-    const release = requestSlot(() => {
-      stop = loadThumb(item.thumb ?? client.streamUrl(item.id, item.path), item.id, (s) => {
-        if (s) setSrc(s);
-        else setFailed(true);
-        release();
+    let release: () => void = () => undefined;
+    void (async () => {
+      // 1) saved on the phone from an earlier visit
+      const saved = await getThumb(item.id);
+      if (dead) return;
+      if (saved) {
+        const u = URL.createObjectURL(saved);
+        thumbCache.set(item.id, u);
+        setSrc(u);
+        return;
+      }
+      // 2) TeraBox's own small thumbnail (photos and video frames), else 3) the file itself (photos only)
+      const source = item.thumb && !thumbBad ? item.thumb : !isVideo ? client.streamUrl(item.id, item.path) : null;
+      if (!source) return;
+      release = requestSlot(() => {
+        stop = loadThumb(source, item.id, (s) => {
+          if (s) setSrc(s);
+          else if (source === item.thumb) setThumbBad(true);
+          else setFailed(true);
+          release();
+        });
       });
-    });
+    })();
     return () => {
+      dead = true;
       stop?.();
       release();
     };

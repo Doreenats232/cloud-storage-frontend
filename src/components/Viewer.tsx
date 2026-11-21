@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, Loader2, Trash2, X, FileWarning } from "lucide-react";
 import { resolveMediaUrl, type VaultClient } from "../lib/api";
 import { useMediaUrl } from "../hooks/useMedia";
+import { VideoPlayer } from "./VideoPlayer";
 import { formatDate, formatSize } from "../lib/format";
 import type { VaultItem } from "../lib/types";
 
@@ -112,17 +113,7 @@ export function Viewer({ items, index, client, onClose, onNavigate, onDownload, 
           </div>
         )}
 
-        {url && item.kind === "video" && (
-          <video
-            key={url}
-            src={url}
-            controls
-            autoPlay
-            playsInline
-            className="max-h-full max-w-full rounded-2xl shadow-2xl shadow-black/60"
-            onLoadedData={() => setLoaded(true)}
-          />
-        )}
+        {url && item.kind === "video" && <VideoPlayer key={url} src={url} id={item.id} />}
 
         {url && item.kind !== "video" && (
           <img
