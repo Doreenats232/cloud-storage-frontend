@@ -5,6 +5,7 @@ import { Share } from "@capacitor/share";
 import { resolveMediaUrl, type VaultClient } from "../lib/api";
 import { useMediaUrl } from "../hooks/useMedia";
 import { VideoPlayer } from "./VideoPlayer";
+import { ZoomableImage } from "./ZoomableImage";
 import { formatDate, formatSize } from "../lib/format";
 import type { VaultItem } from "../lib/types";
 
@@ -173,13 +174,16 @@ export function Viewer({ items, index, client, onClose, onNavigate, onDownload, 
         {url && item.kind === "video" && <VideoPlayer key={url} src={url} id={item.id} />}
 
         {url && item.kind !== "video" && (
-          <img
-            key={url}
+          <ZoomableImage
             src={url}
             alt={item.name}
+            loaded={loaded}
             onLoad={() => setLoaded(true)}
-            className={`max-h-full max-w-full select-none rounded-2xl object-contain shadow-2xl shadow-black/60 transition duration-500 ${loaded ? "opacity-100 scale-100" : "scale-[0.98] opacity-0"}`}
-            draggable={false}
+            onSwipe={(d) => {
+              const n = index + d;
+              if (n >= 0 && n < items.length) onNavigate(n);
+            }}
+            onClose={onClose}
           />
         )}
       </div>
@@ -187,7 +191,7 @@ export function Viewer({ items, index, client, onClose, onNavigate, onDownload, 
       {note && (
         <div className="pointer-events-none absolute bottom-14 left-1/2 -translate-x-1/2 rounded-full bg-black/80 px-4 py-2 text-xs text-white">{note}</div>
       )}
-      <div className="pb-4 text-center text-[11px] text-zinc-600">← → to browse · Esc to close</div>
+      <div className="pb-4 text-center text-[11px] text-zinc-600">Swipe or ← → to browse · pinch to zoom · swipe down to close</div>
     </div>
   );
 }

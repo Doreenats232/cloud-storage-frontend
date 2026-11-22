@@ -12,6 +12,7 @@ import { useBackup } from "./hooks/useBackup";
 import { BackupCard } from "./components/BackupCard";
 import { BackupTray } from "./components/BackupTray";
 import { AlbumBar } from "./components/AlbumBar";
+import { StorageReport } from "./components/StorageReport";
 import { useCollections } from "./hooks/useCollections";
 import { applyFilters, DEFAULT_FILTERS, typeOptions, type Filters } from "./lib/filters";
 import { Sidebar, Brand } from "./components/Sidebar";
@@ -54,6 +55,7 @@ export default function App() {
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [collection, setCollection] = useState<string>("all");
   const [albumModal, setAlbumModal] = useState<null | { mode: "add" } | { mode: "new" } | { mode: "rename"; id: string }>(null);
+  const [storageOpen, setStorageOpen] = useState(false);
   const [confirmAlbum, setConfirmAlbum] = useState<string | null>(null);
   const cols = useCollections();
 
@@ -592,6 +594,25 @@ export default function App() {
         <Modal onClose={() => setSettingsOpen(false)} title="Setup" subtitle="Connect your terabox-vault-backend">
           <SettingsPanel initial={settings} onSave={saveSettingsHandler} onCancel={() => setSettingsOpen(false)} />
           <BackupCard b={backup} />
+          <button
+            onClick={() => {
+              setSettingsOpen(false);
+              setStorageOpen(true);
+            }}
+            className="mt-4 flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left hover:bg-white/[0.06]"
+          >
+            <span>
+              <span className="block text-sm font-semibold text-white">Storage report</span>
+              <span className="block text-xs text-zinc-500">What uses space · find duplicates</span>
+            </span>
+            <ChevronRight className="h-4 w-4 text-zinc-500" />
+          </button>
+        </Modal>
+      )}
+
+      {storageOpen && (
+        <Modal onClose={() => setStorageOpen(false)} title="Storage" subtitle="Based on your indexed library">
+          <StorageReport items={items} onDelete={(list) => requestDelete(list)} />
         </Modal>
       )}
 
