@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState } from "react";
-import { Check, FileWarning, Film, Play } from "lucide-react";
+import { Check, FileWarning, Film, Heart, Play } from "lucide-react";
 import type { VaultClient } from "../lib/api";
 import { requestSlot, thumbCache } from "../lib/slots";
 import { getThumb, putThumb } from "../lib/thumbdb";
@@ -12,6 +12,8 @@ interface MediaThumbProps {
   client: VaultClient;
   selected: boolean;
   selectActive: boolean;
+  fav: boolean;
+  onFav: (id: string) => void;
   onOpen: (index: number) => void;
   onToggle: (id: string) => void;
 }
@@ -70,7 +72,7 @@ function loadThumb(url: string, id: string, done: (src: string | null) => void):
 }
 
 /** One square tile in the photo/video grid. Videos are a light placeholder (no network). */
-function MediaThumbBase({ item, index, client, selected, selectActive, onOpen, onToggle }: MediaThumbProps) {
+function MediaThumbBase({ item, index, client, selected, selectActive, fav, onFav, onOpen, onToggle }: MediaThumbProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [near, setNear] = useState(false);
   const [src, setSrc] = useState<string | null>(() => thumbCache.get(item.id) ?? null);
@@ -163,6 +165,19 @@ function MediaThumbBase({ item, index, client, selected, selectActive, onOpen, o
         <div className="pointer-events-none absolute bottom-2 left-2 flex items-center gap-1 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-semibold text-white">
           <Play className="h-2.5 w-2.5 fill-white" /> Video
         </div>
+      )}
+
+      {(fav || selectActive) && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onFav(item.id);
+          }}
+          aria-label={fav ? "Remove favorite" : "Favorite"}
+          className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-black/50"
+        >
+          <Heart className={cn("h-3.5 w-3.5", fav ? "fill-rose-500 text-rose-500" : "text-white/80")} />
+        </button>
       )}
 
       <button

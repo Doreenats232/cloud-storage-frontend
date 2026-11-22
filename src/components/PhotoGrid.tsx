@@ -10,10 +10,12 @@ interface PhotoGridProps {
   selected: Set<string>;
   onOpen: (index: number) => void;
   onToggle: (id: string) => void;
+  favs: Set<string>;
+  onFav: (id: string) => void;
 }
 
 /** Google-Photos-style grid: date sections over a tight, responsive tile grid. */
-export function PhotoGrid({ items, client, selected, onOpen, onToggle }: PhotoGridProps) {
+export function PhotoGrid({ items, client, selected, onOpen, onToggle, favs, onFav }: PhotoGridProps) {
   const groups = useMemo(() => {
     const out: { label: string; entries: { item: VaultItem; index: number }[] }[] = [];
     const byLabel = new Map<string, (typeof out)[number]>();
@@ -50,6 +52,8 @@ export function PhotoGrid({ items, client, selected, onOpen, onToggle }: PhotoGr
                 client={client}
                 selected={selected.has(item.id)}
                 selectActive={selectActive}
+                fav={favs.has(item.id)}
+                onFav={onFav}
                 onOpen={onOpen}
                 onToggle={onToggle}
               />

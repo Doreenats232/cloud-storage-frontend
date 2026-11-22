@@ -1,9 +1,10 @@
 import { useRef, useState } from "react";
-import { ArrowDownAZ, Check, Download, Loader2, Search, Trash2, Upload, X, AlertCircle, CheckCircle2 } from "lucide-react";
+import { ArrowDownAZ, Check, Download, FolderPlus, Heart, Loader2, Search, SlidersHorizontal, Trash2, Upload, X, AlertCircle, CheckCircle2 } from "lucide-react";
 import { cn } from "../utils/cn";
 import { Brand } from "./Sidebar";
 import { formatTime } from "../lib/format";
 import type { View } from "../lib/types";
+import { DATE_OPTIONS, SIZE_OPTIONS, activeFilterCount, DEFAULT_FILTERS, type Filters } from "../lib/filters";
 
 export type SortMode = "newest" | "oldest" | "name" | "size";
 
@@ -25,12 +26,19 @@ interface TopbarProps {
   onDownloadSelected: () => void;
   onDeleteSelected: () => void;
   onClearSelection: () => void;
+  filters: Filters;
+  onFilters: (f: Filters) => void;
+  typeOpts: { value: Filters["type"]; label: string }[];
+  onAddToAlbum?: () => void;
+  onFavSelected?: () => void;
 }
 
 export function Topbar(p: TopbarProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const mediaRef = useRef<HTMLInputElement>(null);
   const [menu, setMenu] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const nFilters = activeFilterCount(p.filters);
 
   const statusNode = (() => {
     if (p.status === "unconfigured") return null;
@@ -161,8 +169,33 @@ export function Topbar(p: TopbarProps) {
             </select>
           </div>
 
+          <button
+            onClick={() => setShowFilters((v) => !v)}
+            className={cn("glass relative flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm text-zinc-200", showFilters && "ring-1 ring-violet-400/50")}
+            aria-label="Filters"
+          >
+            <SlidersHorizontal className="h-4 w-4 text-zinc-400" />
+            <span className="hidden sm:inline">Filters</span>
+            {nFilters > 0 && <span className="rounded-full bg-violet-500 px-1.5 text-[10px] font-bold text-white">{nFilters}</span>}
+          </button>
+
           <div className="lg:hidden">{statusNode}</div>
         </div>
+
+        {showFilters && (
+          <div className="pop flex flex-wrap items-center gap-2">
+            {p.typeOpts.length > 0 && (
+              <FilterSelect label="Type" value={p.filters.type} options={p.typeOpts} onChange={(v) => p.onFilters({ ...p.filters, type: v as Filters["type"] })} />
+            )}
+            <FilterSelect label="Date" value={p.filters.date} options={DATE_OPTIONS} onChange={(v) => p.onFilters({ ...p.filters, date: v as Filters["date"] })} />
+            <FilterSelect label="Size" value={p.filters.size} options={SIZE_OPTIONS} onChange={(v) => p.onFilters({ ...p.filters, size: v as Filters["size"] })} />
+            {nFilters > 0 && (
+              <button onClick={() => p.onFilters(DEFAULT_FILTERS)} className="rounded-lg px-2 py-1.5 text-xs text-violet-200 hover:bg-white/10">
+                Reset
+              </button>
+            )}
+          </div>
+        )}
 
         {p.selectedCount > 0 && (
           <div className="pop fade-up flex items-center gap-2 rounded-xl border border-violet-400/20 bg-violet-500/10 px-3 py-2">
@@ -171,6 +204,16 @@ export function Topbar(p: TopbarProps) {
             </button>
             <span className="text-sm font-medium text-violet-100">{p.selectedCount} selected</span>
             <div className="ml-auto flex items-center gap-2">
+              {p.onFavSelected && (
+                <button onClick={p.onFavSelected} className="flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20" aria-label="Favorite">
+                  <Heart className="h-3.5 w-3.5" />
+                </button>
+              )}
+              {p.onAddToAlbum && (
+                <button onClick={p.onAddToAlbum} className="flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20">
+                  <FolderPlus className="h-3.5 w-3.5" /> Album
+                </button>
+              )}
               <button
                 onClick={p.onDownloadSelected}
                 className={cn("flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20")}
@@ -194,5 +237,24 @@ export function Topbar(p: TopbarProps) {
         )}
       </div>
     </header>
+  );
+}
+
+function FilterSelect({ label, value, options, onChange }: { label: string; value: string; options: { value: string; label: string }[]; onChange: (v: string) => void }) {
+  return (
+    <label className="glass flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs">
+      <span className="text-zinc-500">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="cursor-pointer bg-transparent py-0.5 text-xs text-zinc-100 focus:outline-none [&>option]:bg-ink-850"
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

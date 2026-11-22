@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Download, Loader2, Share2, Trash2, X, FileWarning } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Heart, Loader2, Share2, Trash2, X, FileWarning } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import { Share } from "@capacitor/share";
 import { resolveMediaUrl, type VaultClient } from "../lib/api";
@@ -16,9 +16,11 @@ interface ViewerProps {
   onNavigate: (index: number) => void;
   onDownload: (item: VaultItem) => void;
   onDelete: (item: VaultItem) => void;
+  isFav: boolean;
+  onFav: (id: string) => void;
 }
 
-export function Viewer({ items, index, client, onClose, onNavigate, onDownload, onDelete }: ViewerProps) {
+export function Viewer({ items, index, client, onClose, onNavigate, onDownload, onDelete, isFav, onFav }: ViewerProps) {
   const item = items[index];
   const { url, error } = useMediaUrl(client, item.id, true, item.path);
   const [loaded, setLoaded] = useState(false);
@@ -86,6 +88,13 @@ export function Viewer({ items, index, client, onClose, onNavigate, onDownload, 
             {formatDate(item.mtime)} · {formatSize(item.size)} · {index + 1} / {items.length}
           </p>
         </div>
+        <button
+          onClick={() => onFav(item.id)}
+          className="rounded-xl bg-white/10 p-2 text-white transition hover:bg-white/20"
+          aria-label={isFav ? "Remove favorite" : "Favorite"}
+        >
+          <Heart className={`h-4 w-4 ${isFav ? "fill-rose-500 text-rose-500" : ""}`} />
+        </button>
         <div className="relative">
           <button
             onClick={() => setShareMenu((m) => !m)}

@@ -11,6 +11,9 @@ import { DownloadTray } from "./components/DownloadTray";
 import { useBackup } from "./hooks/useBackup";
 import { BackupCard } from "./components/BackupCard";
 import { BackupTray } from "./components/BackupTray";
+import { AlbumBar } from "./components/AlbumBar";
+import { useCollections } from "./hooks/useCollections";
+import { applyFilters, DEFAULT_FILTERS, typeOptions, type Filters } from "./lib/filters";
 import { Sidebar, Brand } from "./components/Sidebar";
 import { Topbar, type SortMode } from "./components/Topbar";
 import { PhotoGrid } from "./components/PhotoGrid";
@@ -48,6 +51,11 @@ export default function App() {
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState<{ msg: string; tone: "ok" | "err" } | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+  const [collection, setCollection] = useState<string>("all");
+  const [albumModal, setAlbumModal] = useState<null | { mode: "add" } | { mode: "new" } | { mode: "rename"; id: string }>(null);
+  const [confirmAlbum, setConfirmAlbum] = useState<string | null>(null);
+  const cols = useCollections();
 
   const library = useLibrary(settings, configured);
   const { items } = library;
@@ -67,6 +75,8 @@ export default function App() {
   useEffect(() => {
     setSelected(new Set());
     setViewerIndex(null);
+    setFilters((f) => (f.type === "all" ? f : { ...f, type: "all" }));
+    setCollection("all");
   }, [view]);
 
   useEffect(() => {
@@ -86,22 +96,43 @@ export default function App() {
     return { bytes, files };
   }, [items]);
 
+  const collectionIds = useMemo(() => {
+    if (collection === "all") return null;
+    if (collection === "fav") return cols.favs;
+    return new Set(cols.albums.find((a) => a.id === collection)?.ids ?? []);
+  }, [collection, cols.favs, cols.albums]);
+  const mediaAll = useMemo(() => items.filter((it) => it.kind === "image" || it.kind === "video"), [items]);
+  const albumCounts = useMemo(() => {
+    const present = new Set(mediaAll.map((m) => m.id));
+    const out: Record<string, number> = {};
+    for (const a of cols.albums) out[a.id] = a.ids.filter((id) => present.has(id)).length;
+    return out;
+  }, [mediaAll, cols.albums]);
+  const favCount = useMemo(() => mediaAll.filter((m) => cols.favs.has(m.id)).length, [mediaAll, cols.favs]);
+
   const photos = useMemo(
-    () => sortItems(items.filter((it) => (it.kind === "image" || it.kind === "video") && matchesQuery(it, q)), sort),
-    [items, q, sort]
+    () =>
+      sortItems(
+        applyFilters(
+          mediaAll.filter((it) => matchesQuery(it, q) && (!collectionIds || collectionIds.has(it.id))),
+          filters
+        ),
+        sort
+      ),
+    [mediaAll, q, sort, filters, collectionIds]
   );
   const videos = useMemo(() => photos.filter((it) => it.kind === "video"), [photos]);
   const apps = useMemo(
-    () => sortItems(items.filter((it) => !it.isDir && it.kind === "app" && matchesQuery(it, q)), sort),
-    [items, q, sort]
+    () => sortItems(applyFilters(items.filter((it) => !it.isDir && it.kind === "app" && matchesQuery(it, q)), filters), sort),
+    [items, q, sort, filters]
   );
   const fileEntries = useMemo(() => {
-    if (q) return sortItems(items.filter((it) => matchesQuery(it, q)), sort);
+    if (q) return sortItems(applyFilters(items.filter((it) => matchesQuery(it, q)), filters), sort);
     const children = items.filter((it) => it.parent === dir);
     const folders = sortItems(children.filter((it) => it.isDir), "name");
-    const files = sortItems(children.filter((it) => !it.isDir), sort);
+    const files = sortItems(applyFilters(children.filter((it) => !it.isDir), filters), sort);
     return [...folders, ...files];
-  }, [items, dir, q, sort]);
+  }, [items, dir, q, sort, filters]);
 
   const counts: Record<View, number> = useMemo(
     () => ({
@@ -204,6 +235,16 @@ export default function App() {
     notify(`Downloading ${files.length} file${files.length > 1 ? "s" : ""}…`);
   };
 
+  const selectedMediaIds = () => selectedItems.filter((it) => it.kind === "image" || it.kind === "video").map((it) => it.id);
+  const favSelected = () => {
+    const ids = selectedMediaIds();
+    if (!ids.length) return;
+    const allFav = ids.every((id) => cols.favs.has(id));
+    cols.setFavMany(ids, !allFav);
+    notify(allFav ? "Removed from favorites" : `Added ${ids.length} to favorites`);
+    setSelected(new Set());
+  };
+
   const doDelete = async () => {
     if (!confirm) return;
     setDeleting(true);
@@ -254,6 +295,19 @@ export default function App() {
 
   /* ---------------- Content ---------------- */
 
+  const albumBar = (
+    <AlbumBar
+      albums={cols.albums}
+      counts={albumCounts}
+      favCount={favCount}
+      active={collection}
+      onSelect={setCollection}
+      onNew={() => setAlbumModal({ mode: "new" })}
+      onRename={(id) => setAlbumModal({ mode: "rename", id })}
+      onDelete={(id) => setConfirmAlbum(id)}
+    />
+  );
+
   const renderContent = () => {
     if (!configured) return <ConnectScreen initial={settings} onSave={saveSettingsHandler} />;
 
@@ -292,21 +346,29 @@ export default function App() {
     if (view === "photos" || view === "videos") {
       if (mediaList.length === 0) {
         return (
-          <EmptyState
+          <>
+            {albumBar}
+            <EmptyState
             icon={view === "photos" ? ImageIcon : Film}
             title={q ? "No matches" : view === "photos" ? "No photos yet" : "No videos yet"}
-            body={q ? `Nothing matches "${search}".` : "Drop images or videos anywhere on this page to start building your library."}
+            body={q || collection !== "all" || filters.date !== "any" || filters.size !== "any" || filters.type !== "all" ? "Nothing here with these filters." : "Drop images or videos anywhere on this page to start building your library."}
           />
+          </>
         );
       }
       return (
-        <PhotoGrid
-          items={mediaList}
-          client={library.client}
-          selected={selected}
-          onOpen={openViewer}
-          onToggle={toggleSelect}
-        />
+        <>
+          {albumBar}
+          <PhotoGrid
+            items={mediaList}
+            client={library.client}
+            selected={selected}
+            onOpen={openViewer}
+            onToggle={toggleSelect}
+            favs={cols.favs}
+            onFav={cols.toggleFav}
+          />
+        </>
       );
     }
 
@@ -405,6 +467,11 @@ export default function App() {
           onDownloadSelected={doDownloadSelected}
           onDeleteSelected={() => requestDelete(selectedItems)}
           onClearSelection={() => setSelected(new Set())}
+          filters={filters}
+          onFilters={setFilters}
+          typeOpts={typeOptions(view)}
+          onAddToAlbum={view === "photos" || view === "videos" ? () => setAlbumModal({ mode: "add" }) : undefined}
+          onFavSelected={view === "photos" || view === "videos" ? favSelected : undefined}
         />
 
         <div className="scroll-thin flex-1 overflow-y-auto px-4 py-5 md:px-6 md:py-6">{renderContent()}</div>
@@ -419,6 +486,8 @@ export default function App() {
           onNavigate={(i) => setViewerIndex(i)}
           onDownload={doDownload}
           onDelete={(it) => requestDelete([it])}
+          isFav={cols.favs.has(viewerItem.id)}
+          onFav={cols.toggleFav}
         />
       )}
 
@@ -437,6 +506,85 @@ export default function App() {
             <p className="text-sm text-zinc-400">Photos go to /Photos, apps to /Apps, everything else to /Files</p>
           </div>
         </div>
+      )}
+
+      {/* Album modals */}
+      {albumModal && albumModal.mode === "add" && (
+        <Modal onClose={() => setAlbumModal(null)} title="Add to album" subtitle={`${selectedMediaIds().length} selected`} narrow>
+          <div className="space-y-2">
+            {cols.albums.length === 0 && <p className="text-sm text-zinc-500">No albums yet. Create one below.</p>}
+            {cols.albums.map((a) => (
+              <button
+                key={a.id}
+                onClick={() => {
+                  cols.addToAlbum(a.id, selectedMediaIds());
+                  notify(`Added to ${a.name}`);
+                  setAlbumModal(null);
+                  setSelected(new Set());
+                }}
+                className="flex w-full items-center justify-between rounded-xl bg-white/5 px-4 py-3 text-left text-sm text-zinc-100 hover:bg-white/10"
+              >
+                {a.name}
+                <span className="text-xs text-zinc-500">{albumCounts[a.id] ?? 0}</span>
+              </button>
+            ))}
+            <NameForm
+              placeholder="New album name"
+              cta="Create & add"
+              onSubmit={(name) => {
+                const id = cols.createAlbum(name, selectedMediaIds());
+                setCollection(id);
+                notify(`Created ${name}`);
+                setAlbumModal(null);
+                setSelected(new Set());
+              }}
+            />
+          </div>
+        </Modal>
+      )}
+      {albumModal && albumModal.mode === "new" && (
+        <Modal onClose={() => setAlbumModal(null)} title="New album" narrow>
+          <NameForm
+            placeholder="Album name"
+            cta="Create"
+            onSubmit={(name) => {
+              setCollection(cols.createAlbum(name));
+              setAlbumModal(null);
+            }}
+          />
+        </Modal>
+      )}
+      {albumModal && albumModal.mode === "rename" && (
+        <Modal onClose={() => setAlbumModal(null)} title="Rename album" narrow>
+          <NameForm
+            placeholder="Album name"
+            cta="Save"
+            initial={cols.albums.find((a) => a.id === albumModal.id)?.name}
+            onSubmit={(name) => {
+              cols.renameAlbum(albumModal.id, name);
+              setAlbumModal(null);
+            }}
+          />
+        </Modal>
+      )}
+      {confirmAlbum && (
+        <Modal onClose={() => setConfirmAlbum(null)} title="Delete album?" subtitle="Your photos stay in the vault" narrow>
+          <div className="flex justify-end gap-2">
+            <button onClick={() => setConfirmAlbum(null)} className="rounded-xl px-4 py-2 text-sm text-zinc-300 hover:bg-white/5">
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                cols.deleteAlbum(confirmAlbum);
+                setCollection("all");
+                setConfirmAlbum(null);
+              }}
+              className="rounded-xl bg-rose-500/80 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-500"
+            >
+              Delete album
+            </button>
+          </div>
+        </Modal>
       )}
 
       {/* Settings modal */}
@@ -591,6 +739,30 @@ function ConnectScreen({ initial, onSave }: { initial: Settings; onSave: (s: Set
         <p className="mb-6 text-sm text-zinc-500">Paste your backend URL and an API key to get started.</p>
         <SettingsPanel initial={initial} onSave={onSave} variant="setup" />
       </div>
+    </div>
+  );
+}
+
+function NameForm({ placeholder, cta, initial = "", onSubmit }: { placeholder: string; cta: string; initial?: string; onSubmit: (name: string) => void }) {
+  const [v, setV] = useState(initial);
+  const go = () => v.trim() && onSubmit(v.trim());
+  return (
+    <div className="flex gap-2 pt-1">
+      <input
+        autoFocus
+        value={v}
+        onChange={(e) => setV(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && go()}
+        placeholder={placeholder}
+        className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/30 px-3.5 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-violet-400/60 focus:outline-none"
+      />
+      <button
+        onClick={go}
+        disabled={!v.trim()}
+        className="rounded-xl bg-gradient-to-br from-violet-500 to-indigo-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
+      >
+        {cta}
+      </button>
     </div>
   );
 }
