@@ -382,6 +382,20 @@ export class VaultClient {
 }
 
 /** Create an API key using the admin token (same as the backend dashboard does). */
+/** Sign in with the dashboard email + password; the vault answers with its admin token. */
+export async function adminLogin(baseUrl: string, email: string, password: string): Promise<string> {
+  const res = await fetch(`${baseUrl.replace(/\/+$/, "")}/admin/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) throw new VaultError(await readError(res), res.status);
+  const data = (await res.json()) as Json;
+  const token = pick(data, ["token"]);
+  if (typeof token !== "string" || !token) throw new VaultError("The vault didn't return a login token.");
+  return token;
+}
+
 export async function createApiKey(
   baseUrl: string,
   adminToken: string,
