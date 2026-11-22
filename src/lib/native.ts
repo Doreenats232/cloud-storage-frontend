@@ -39,3 +39,12 @@ export interface BackupPlugin {
 
 /** Photo auto-backup engine (native: scans the gallery and uploads in the background). */
 export const Backup = registerPlugin<BackupPlugin>("Backup");
+
+export interface BiometricPlugin {
+  available(): Promise<{ available: boolean }>;
+  authenticate(o: { title?: string }): Promise<{ ok: boolean; error?: string }>;
+  setSecure(o: { on: boolean }): Promise<void>;
+}
+
+/** Fingerprint prompt + screenshot/recents protection (Android app only). */
+export const Biometric = registerPlugin<BiometricPlugin>("Biometric");

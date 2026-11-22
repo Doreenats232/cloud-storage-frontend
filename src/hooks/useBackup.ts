@@ -37,7 +37,12 @@ export function useBackup(settings: Settings) {
 
   // Keep the native side in sync with the connection + switches.
   useEffect(() => {
-    if (!native || !settings.apiKey || !settings.baseUrl) return;
+    if (!native) return;
+    if (!settings.apiKey || !settings.baseUrl) {
+      // signed out: stop background uploads
+      void Backup.configure({ ...cfg, enabled: false, baseUrl: "", apiKey: "", dir: "/Photos" }).catch(() => undefined);
+      return;
+    }
     void Backup.configure({ ...cfg, baseUrl: settings.baseUrl, apiKey: settings.apiKey, dir: "/Photos" })
       .then(refresh)
       .catch(() => undefined);

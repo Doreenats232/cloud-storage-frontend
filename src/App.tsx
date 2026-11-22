@@ -13,6 +13,10 @@ import { BackupCard } from "./components/BackupCard";
 import { BackupTray } from "./components/BackupTray";
 import { AlbumBar } from "./components/AlbumBar";
 import { StorageReport } from "./components/StorageReport";
+import { LoginForm } from "./components/LoginForm";
+import { useAppLock } from "./hooks/useAppLock";
+import { LockScreen } from "./components/LockScreen";
+import { LockCard } from "./components/LockCard";
 import { useCollections } from "./hooks/useCollections";
 import { applyFilters, DEFAULT_FILTERS, typeOptions, type Filters } from "./lib/filters";
 import { Sidebar, Brand } from "./components/Sidebar";
@@ -64,6 +68,7 @@ export default function App() {
   const uploads = useUploads(settings, library.addItems);
 
   const notify = useCallback((msg: string, tone: "ok" | "err" = "ok") => setToast({ msg, tone }), []);
+  const lock = useAppLock();
   const backup = useBackup(settings);
   const downloads = useDownloads(library.client, (m) => notify(m, "err"));
 
@@ -277,6 +282,21 @@ export default function App() {
     setSettings(s);
     setSettingsOpen(false);
     notify("Connected to your vault");
+  };
+
+  const signOut = () => {
+    const cleared = { baseUrl: settings.baseUrl, apiKey: "" };
+    saveSettings(cleared);
+    clearMediaCache();
+    try {
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith("vault.lib.v1"))
+        .forEach((k) => localStorage.removeItem(k));
+    } catch {
+      /* ignore */
+    }
+    setSettings(cleared);
+    setSettingsOpen(false);
   };
 
   /* ---------------- Header copy ---------------- */
@@ -510,6 +530,10 @@ export default function App() {
         </div>
       )}
 
+      {lock.locked && lock.cfg.enabled && (
+        <LockScreen len={lock.cfg.len} showBiometric={lock.cfg.biometric && lock.bioAvailable} onPin={lock.verifyPin} onBiometric={lock.tryBiometric} />
+      )}
+
       {/* Album modals */}
       {albumModal && albumModal.mode === "add" && (
         <Modal onClose={() => setAlbumModal(null)} title="Add to album" subtitle={`${selectedMediaIds().length} selected`} narrow>
@@ -594,6 +618,7 @@ export default function App() {
         <Modal onClose={() => setSettingsOpen(false)} title="Setup" subtitle="Connect your terabox-vault-backend">
           <SettingsPanel initial={settings} onSave={saveSettingsHandler} onCancel={() => setSettingsOpen(false)} />
           <BackupCard b={backup} />
+          <LockCard lock={lock} />
           <button
             onClick={() => {
               setSettingsOpen(false);
@@ -606,6 +631,9 @@ export default function App() {
               <span className="block text-xs text-zinc-500">What uses space · find duplicates</span>
             </span>
             <ChevronRight className="h-4 w-4 text-zinc-500" />
+          </button>
+          <button onClick={signOut} className="mt-4 w-full rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-200 hover:bg-rose-500/20">
+            Sign out
           </button>
         </Modal>
       )}
@@ -756,9 +784,9 @@ function ConnectScreen({ initial, onSave }: { initial: Settings; onSave: (s: Set
         <div className="mb-6 flex items-center gap-3">
           <Brand />
         </div>
-        <h2 className="mb-1 text-xl font-bold text-white">Connect your vault</h2>
-        <p className="mb-6 text-sm text-zinc-500">Paste your backend URL and an API key to get started.</p>
-        <SettingsPanel initial={initial} onSave={onSave} variant="setup" />
+        <h2 className="mb-1 text-xl font-bold text-white">Sign in</h2>
+        <p className="mb-6 text-sm text-zinc-500">Enter your vault address and password.</p>
+        <LoginForm initial={initial} onSave={onSave} />
       </div>
     </div>
   );

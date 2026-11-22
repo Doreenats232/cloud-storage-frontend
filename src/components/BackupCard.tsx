@@ -4,7 +4,7 @@ import type { useBackup } from "../hooks/useBackup";
 
 type B = ReturnType<typeof useBackup>;
 
-function Switch({ on, onChange, label, hint }: { on: boolean; onChange: (v: boolean) => void; label: string; hint?: string }) {
+export function Switch({ on, onChange, label, hint }: { on: boolean; onChange: (v: boolean) => void; label: string; hint?: string }) {
   return (
     <button onClick={() => onChange(!on)} className="flex w-full items-center gap-3 rounded-xl px-1 py-2 text-left">
       <div className="min-w-0 flex-1">
